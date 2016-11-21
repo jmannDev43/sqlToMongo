@@ -1,6 +1,6 @@
 # sqlToMongo
 
-#### Personal project to query using standard SQL in Mongo shell and have it converted to MongoDB queries, with custom tab completion (WIP).
+#### Personal project to query MongoDB using standard SQL in Mongo shell, with custom tab completion (WIP).
 
    
 ### Querying   
