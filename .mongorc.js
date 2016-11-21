@@ -1,45 +1,31 @@
+// ######## Load mesh ########
 // See https://www.skratchdot.com/projects/mesh/
-// I've loaded it to the directory you see below, but load it anywhere you like.
 load('/usr/local/scripts/mesh.js');
 
 prompt = function () {
     return db + ' : ' + (new Date()).toLocaleDateString() + ' @ ' + (new Date()).toLocaleTimeString() + '> ';
 }
 
-
-// global vars...
+// ######## Global vars ########
 queryHasCollection = false;
 sqlQuery = '';
 matches = null;
 selectedCollection = '';
+snippetMap = {
+    'w': 'where',
+    'sc': 'showCollections()',
+    'ob': 'order by ',
+    'nw': 'use Northwind'
+};
 
-
-function generateFieldTable(collection){
-    // Defined at bottom of file.
-    var table = new AsciiTable(collection);
-    table.setHeading('#', 'Field', 'Types');
-    collectionFields.filter(function(a) { return a.collection === collection }).sort(function(f1, f2) { return f1.field > f2.field }).map(function(d, i) { return table.addRow(i, d.field, d.types) });
-    return print(colorize(table, 'cyan', true, false));
-}
-
-/* Show Collection Fields */
-DBCollection.prototype.fields = function(){
-    var collection = this.getName();
-    generateFieldTable(collection);
-}
-
-var line = '*********** ############ *********** ############ *********** ############ *********** ############ \n';
+// ######## Start of SQL to Mongo conversion code ########
 DB.prototype.sql = function(sql, makeUgly){
-    print('\nOriginal SQL: ' + colorize(sql, 'magenta', true, true));
-    //Ex: 'Select name, code from states where ...'
+    var line = '************************************************************************ ';
+    print(line);
+    print('Original SQL: ' + colorize(sql, 'magenta', true, true));
     var query = parseSQL(sql);
-
     var count = this[query.collection].find(query.filter).count();
-    print(line);
-    print('\t \t \t \t \t \t \t \t ------ QUERY (' + count.toString() + ' DOCUMENT(S) RETURNED) ------');
-    print(line);
-
-    printjsononeline(query);
+    print(' ------------ ' + count.toString() + ' DOCUMENT(S) RETURNED ------------ ');
 
     if (queryHasCollection || sqlQuery != '')
         resetGlobalVars();
@@ -53,9 +39,13 @@ DB.prototype.sql = function(sql, makeUgly){
     }
 }
 
+DBCollection.prototype.fields = function(){
+    var collection = this.getName();
+    generateFieldTable(collection);
+}
+
 sqlKeywords = ['select', 'top', 'from', 'join', 'where', 'groupby', 'orderby', 'having']; // keep "top x" in mind
 logicalOperators = ['!=', '<=', '>=', '<', '>', '=', '!in', 'in', 'like'];
-collections = ['movieData','movies','moviesScratch','reviews'];
 
 var hasTop, hasWhere, hasOrderBy, processed = [], whereValsWithSpaces, hasOr, filterFields, operators, sqlishFilter, filter;
 parseSQL = function(sql){
@@ -90,13 +80,13 @@ parseSQL = function(sql){
                 processFilter(f, filter);
             }
         });
-    }
 
-    if (hasOr){
-        filter = { $or: orArr };
-    }
+        if (hasOr){
+            filter = { $or: orArr };
+        }
 
-    getNext(arr, 2); // remove where and clause, since its handled earlier
+        getNext(arr, 2); // remove where and clause, since its handled earlier
+    }
 
     if (hasOrderBy){
         getNext(arr); // remove order by
@@ -286,8 +276,326 @@ getSort = function(arr){
 };
 
 validateCollection = function(collection){
-  return _.contains(collections,collection) ? collection : 'Invalid Collection.';
+    return _.contains(collections,collection) ? collection : 'Invalid Collection.';
 };
+
+// ######## Start of custom auto-complete code ########
+function interceptAutoComplete(prefix, global, parts){
+    if (prefix.length === 0){ // space only
+        return ["')"];
+    }
+
+    var first = parts[0].toLowerCase();
+    var expandToText = snippetMap[first];
+    var lastChar = first.substring(first.length - 1, first.length);
+    var lastTwoChars = first.substring(first.length - 2, first.length);
+
+    if (first === 'sel'){
+        sqlQuery = "db.sql('select * from ";
+        return [sqlQuery];
+    } else if (expandToText){
+        return [expandToText];
+    } else if (!queryHasCollection && isNaN(lastChar)) {
+        return printCollections(first);
+    } else if (!queryHasCollection) {
+        return selectCollection(lastTwoChars, lastChar);
+    } else if (queryHasCollection && isNaN(lastChar)) {
+        return printFields(first);
+    } else {
+        return selectField(lastTwoChars, lastChar)
+    }
+}
+
+function printMatches(isField){
+    if (matches.length > 0){
+        print('\n');
+        matches.forEach(function(m, i){
+            var str = i + ': ' + m
+            print(colorize(str, 'green', true, false));
+        });
+    } else {
+        resetGlobalVars();
+        return [''];
+    }
+}
+
+function printCollections(first){
+    // No collection has been selected yet, and user isn't passing number for selection...
+    if (_.contains(collections, first)){
+        selectedCollection = first;
+        sqlQuery += selectedCollection;
+
+        return [selectedCollection];
+    }
+
+    matches = _.filter(collections, function(c){
+        return c.toLowerCase().substring(0, (first.length)) === first;
+    });
+
+    printMatches();
+}
+
+function selectCollection(lastTwoChars, lastChar){
+    // no collection is selected yet, but user is passing number for selection...
+    var num = !isNaN(lastTwoChars) ? lastTwoChars : lastChar;
+    selectedCollection = matches[num];
+    queryHasCollection = true;
+    print('\n');
+    generateFieldTable(selectedCollection);
+
+    if (sqlQuery === ''){
+        sqlQuery = "db.sql('select * from " + selectedCollection;
+        return [sqlQuery];
+    }
+
+    sqlQuery += selectedCollection;
+    return [selectedCollection];
+}
+
+function printFields(first){
+    // collection has been selected and user is trying to select field based on initial string
+    matches = collectionFields.filter(function(a) {
+        return a.collection === selectedCollection
+    }).filter(function(c){
+        return c.field.toLowerCase().substring(0, (first.length)) === first;
+    }).sort(function(f1, f2) {
+        return f1.field > f2.field
+    }).map(function(d, i) { return d.field });
+
+    printMatches();
+}
+
+function selectField(lastTwoChars, lastChar){
+    // collection has been selected, as well as field string, now user is passing number to select one...
+    var num = !isNaN(lastTwoChars) ? lastTwoChars : lastChar;
+    var field = matches[num];
+
+    return [field];
+}
+
+function showCollections(){
+    return db.getCollectionNames();
+}
+
+function resetGlobalVars (){
+    queryHasCollection = false;
+    sqlQuery = '';
+    matches = null;
+    selectedCollection = '';
+}
+
+function generateFieldTable(collection){
+    var table = new AsciiTable(collection);
+    table.setHeading('#', 'Field', 'Types');
+    collectionFields.filter(function(a) {
+        return a.collection === collection
+    }).sort(function(f1, f2) {
+        return f1.field > f2.field
+    }).map(function(d, i) {
+        return table.addRow(i, d.field, d.types)
+    });
+    return print(colorize(table, 'cyan', true, false));
+}
+
+
+// ######## Code from mongo shell utils ########
+// See https://api.mongodb.com/js/current/symbols/src/src_mongo_shell_utils.js.html
+shellAutocomplete = function(
+    /*prefix*/) {  // outer scope function called on init. Actual function at end
+
+    var universalMethods =
+        "db.sql('select constructor prototype toString valueOf toLocaleString hasOwnProperty propertyIsEnumerable"
+            .split(' ');
+
+    var builtinMethods = {};  // uses constructor objects as keys
+    builtinMethods[Array] =
+        "length concat join pop push reverse shift slice sort splice unshift indexOf lastIndexOf every filter forEach map some isArray reduce reduceRight"
+            .split(' ');
+    builtinMethods[Boolean] = "".split(' ');  // nothing more than universal methods
+    builtinMethods[Date] =
+        "getDate getDay getFullYear getHours getMilliseconds getMinutes getMonth getSeconds getTime getTimezoneOffset getUTCDate getUTCDay getUTCFullYear getUTCHours getUTCMilliseconds getUTCMinutes getUTCMonth getUTCSeconds getYear parse setDate setFullYear setHours setMilliseconds setMinutes setMonth setSeconds setTime setUTCDate setUTCFullYear setUTCHours setUTCMilliseconds setUTCMinutes setUTCMonth setUTCSeconds setYear toDateString toGMTString toISOString toLocaleDateString toLocaleTimeString toTimeString toUTCString UTC now"
+            .split(' ');
+    if (typeof JSON != "undefined") {  // JSON is new in V8
+        builtinMethods["[object JSON]"] = "parse stringify".split(' ');
+    }
+    builtinMethods[Math] =
+        "E LN2 LN10 LOG2E LOG10E PI SQRT1_2 SQRT2 abs acos asin atan atan2 ceil cos exp floor log max min pow random round sin sqrt tan"
+            .split(' ');
+    builtinMethods[Number] =
+        "MAX_VALUE MIN_VALUE NEGATIVE_INFINITY POSITIVE_INFINITY toExponential toFixed toPrecision"
+            .split(' ');
+    builtinMethods[RegExp] =
+        "global ignoreCase lastIndex multiline source compile exec test".split(' ');
+    builtinMethods[String] =
+        "length charAt charCodeAt concat fromCharCode indexOf lastIndexOf match replace search slice split substr substring toLowerCase toUpperCase trim trimLeft trimRight"
+            .split(' ');
+    builtinMethods[Function] = "call apply bind".split(' ');
+    builtinMethods[Object] =
+        "bsonsize create defineProperty defineProperties getPrototypeOf keys seal freeze preventExtensions isSealed isFrozen isExtensible getOwnPropertyDescriptor getOwnPropertyNames"
+            .split(' ');
+
+    builtinMethods[Mongo] = "find update insert remove".split(' ');
+    builtinMethods[BinData] = "hex base64 length subtype".split(' ');
+
+    var extraGlobals =
+        "Infinity NaN undefined null true false decodeURI decodeURIComponent encodeURI encodeURIComponent escape eval isFinite isNaN parseFloat parseInt unescape Array Boolean Date Math Number RegExp String print load gc MinKey MaxKey Mongo NumberInt NumberLong ObjectId DBPointer UUID BinData HexData MD5 Map Timestamp JSON"
+            .split(' ');
+    if (typeof NumberDecimal !== 'undefined') {
+        extraGlobals[extraGlobals.length] = "NumberDecimal";
+    }
+
+    var isPrivate = function(name) {
+        if (shellAutocomplete.showPrivate)
+            return false;
+        if (name == '_id')
+            return false;
+        if (name[0] == '_')
+            return true;
+        if (name[name.length - 1] == '_')
+            return true;  // some native functions have an extra name_ method
+        return false;
+    };
+
+    var customComplete = function(obj) {
+        try {
+            if (obj.__proto__.constructor.autocomplete) {
+                var ret = obj.constructor.autocomplete(obj);
+                if (ret.constructor != Array) {
+                    print("\nautocompleters must return real Arrays");
+                    return [];
+                }
+                return ret;
+            } else {
+                return [];
+            }
+        } catch (e) {
+            // print( e ); // uncomment if debugging custom completers
+            return [];
+        }
+    };
+
+    var worker = function(prefix) {
+        var global = (function() {
+            return this;
+        }).call();  // trick to get global object
+        var parts = prefix.split('.');
+
+        // ######## Intercept worker function ########
+        var intercept = interceptAutoComplete(prefix, global, parts);
+        if (intercept){
+            return intercept;
+        }
+        // ######## End ########
+
+        var curObj = global;
+
+        for (var p = 0; p < parts.length - 1; p++) {  // doesn't include last part
+            curObj = curObj[parts[p]];
+            if (curObj == null)
+                return [];
+        }
+
+        var lastPrefix = parts[parts.length - 1] || '';
+        var lastPrefixLowercase = lastPrefix.toLowerCase();
+        var beginning = parts.slice(0, parts.length - 1).join('.');
+        if (beginning.length)
+            beginning += '.';
+
+        var possibilities = [];
+
+        var noDuplicates =
+        {};  // see http://dreaminginjavascript.wordpress.com/2008/08/22/eliminating-duplicates/
+        for (var i = 0; i < possibilities.length; i++) {
+            var p = possibilities[i];
+            if (typeof(curObj[p]) == "undefined" && curObj != global)
+                continue;  // extraGlobals aren't in the global object
+            if (p.length == 0 || p.length < lastPrefix.length)
+                continue;
+            if (lastPrefix[0] != '_' && isPrivate(p))
+                continue;
+            if (p.match(/^[0-9]+$/))
+                continue;  // don't array number indexes
+            if (p.substr(0, lastPrefix.length).toLowerCase() != lastPrefixLowercase)
+                continue;
+
+            var completion = beginning + p;
+            if (curObj[p] && curObj[p].constructor == Function && p != 'constructor')
+                completion += '(';
+
+            noDuplicates[completion] = 0;
+        }
+
+        var ret = [];
+        for (var i in noDuplicates)
+            ret.push(i);
+
+        return ret;
+    };
+
+    // this is the actual function that gets assigned to shellAutocomplete
+    return function(prefix) {
+        try {
+            __autocomplete__ = worker(prefix).sort();
+        } catch (e) {
+            print("exception during autocomplete: " + tojson(e.message));
+            __autocomplete__ = [];
+        }
+    };
+}();
+
+// -----------------------------------------------------------------------------------------------------------------------------------------
+
+/*
+ *
+ * Mongo-Hacker
+ * MongoDB Shell Enhancements for Hackers
+ *
+ * Tyler J. Brock - 2013
+ *
+ * http://tylerbrock.github.com/mongo-hacker
+ *
+ */
+
+if (_isWindows()) {
+    print("\nSorry! MongoDB Shell Enhancements for Hackers isn't compatible with Windows.\n");
+}
+
+if (typeof db !== 'undefined') {
+    var current_version = parseFloat(db.serverBuildInfo().version).toFixed(2)
+
+    if (current_version < 2.2) {
+        print("Sorry! MongoDB Shell Enhancements for Hackers is only compatible with Mongo 2.2+\n");
+    }
+}
+
+mongo_hacker_config = {
+    verbose_shell:  true,      // additional verbosity
+    index_paranoia: true,      // querytime explain
+    enhance_api:    true,      // additonal api extensions
+    indent:         2,         // number of spaces for indent
+    uuid_type:      'default', // 'java', 'c#', 'python' or 'default'
+    banner_message: 'Mongo-Hacker ', //banner message
+    version:        '0.0.3',    // current mongo-hacker version
+    show_banner:     true,      // show mongo-hacker version banner on startup
+
+    // Shell Color Settings
+    // [<color>, <bold>, <underline>]
+    // Colors available: red, green, yellow, blue, magenta, cyan
+    colors: {
+        'number':     [ 'blue', false, false ],
+        'null':       [ 'red', false, false ],
+        'undefined':  [ 'magenta', false, false ],
+        'objectid':   [ 'green', false, false ],
+        'string':     [ 'green', false, false ],
+        'function':   [ 'magenta', false, false ],
+        'date':       [ 'blue', false, false ],
+        'uuid':       [ 'cyan', false, false]
+    }
+}
+
+if (mongo_hacker_config['show_banner']) {
+    print(mongo_hacker_config['banner_message'] + mongo_hacker_config['version']);
+}
 
 //----------------------------------------------------------------------------
 // Color Functions
@@ -336,318 +644,371 @@ function colorize( string, color, bright, underline ) {
 
     return applyColorCode( string, params );
 };
+__indent = Array(mongo_hacker_config.indent + 1).join(' ');
 
+ObjectId.prototype.toString = function() {
+    return this.str;
+};
 
-// shortcut for show collections
-function sc(){
-    return db.getCollectionNames();
-}
+ObjectId.prototype.tojson = function(indent, nolint) {
+    return tojson(this);
+};
 
+Date.prototype.tojson = function() {
 
-function resetGlobalVars (){
-    queryHasCollection = false;
-    sqlQuery = '';
-    matches = null;
-    selectedCollection = '';
-}
+    var UTC = Date.printAsUTC ? 'UTC' : '';
 
+    var year = this['get'+UTC+'FullYear']().zeroPad(4);
+    var month = (this['get'+UTC+'Month']() + 1).zeroPad(2);
+    var date = this['get'+UTC+'Date']().zeroPad(2);
+    var hour = this['get'+UTC+'Hours']().zeroPad(2);
+    var minute = this['get'+UTC+'Minutes']().zeroPad(2);
+    var sec = this['get'+UTC+'Seconds']().zeroPad(2);
 
-shellAutocomplete = function(
-        /*prefix*/) {  // outer scope function called on init. Actual function at end
+    if (this['get'+UTC+'Milliseconds']())
+        sec += '.' + this['get'+UTC+'Milliseconds']().zeroPad(3);
 
-    var universalMethods =
-            "db.sql('select constructor prototype toString valueOf toLocaleString hasOwnProperty propertyIsEnumerable"
-                    .split(' ');
-
-    var builtinMethods = {};  // uses constructor objects as keys
-    builtinMethods[Array] =
-            "length concat join pop push reverse shift slice sort splice unshift indexOf lastIndexOf every filter forEach map some isArray reduce reduceRight"
-                    .split(' ');
-    builtinMethods[Boolean] = "".split(' ');  // nothing more than universal methods
-    builtinMethods[Date] =
-            "getDate getDay getFullYear getHours getMilliseconds getMinutes getMonth getSeconds getTime getTimezoneOffset getUTCDate getUTCDay getUTCFullYear getUTCHours getUTCMilliseconds getUTCMinutes getUTCMonth getUTCSeconds getYear parse setDate setFullYear setHours setMilliseconds setMinutes setMonth setSeconds setTime setUTCDate setUTCFullYear setUTCHours setUTCMilliseconds setUTCMinutes setUTCMonth setUTCSeconds setYear toDateString toGMTString toISOString toLocaleDateString toLocaleTimeString toTimeString toUTCString UTC now"
-                    .split(' ');
-    if (typeof JSON != "undefined") {  // JSON is new in V8
-        builtinMethods["[object JSON]"] = "parse stringify".split(' ');
-    }
-    builtinMethods[Math] =
-            "E LN2 LN10 LOG2E LOG10E PI SQRT1_2 SQRT2 abs acos asin atan atan2 ceil cos exp floor log max min pow random round sin sqrt tan"
-                    .split(' ');
-    builtinMethods[Number] =
-            "MAX_VALUE MIN_VALUE NEGATIVE_INFINITY POSITIVE_INFINITY toExponential toFixed toPrecision"
-                    .split(' ');
-    builtinMethods[RegExp] =
-            "global ignoreCase lastIndex multiline source compile exec test".split(' ');
-    builtinMethods[String] =
-            "length charAt charCodeAt concat fromCharCode indexOf lastIndexOf match replace search slice split substr substring toLowerCase toUpperCase trim trimLeft trimRight"
-                    .split(' ');
-    builtinMethods[Function] = "call apply bind".split(' ');
-    builtinMethods[Object] =
-            "bsonsize create defineProperty defineProperties getPrototypeOf keys seal freeze preventExtensions isSealed isFrozen isExtensible getOwnPropertyDescriptor getOwnPropertyNames"
-                    .split(' ');
-
-    builtinMethods[Mongo] = "find update insert remove".split(' ');
-    builtinMethods[BinData] = "hex base64 length subtype".split(' ');
-
-    var extraGlobals =
-            "Infinity NaN undefined null true false decodeURI decodeURIComponent encodeURI encodeURIComponent escape eval isFinite isNaN parseFloat parseInt unescape Array Boolean Date Math Number RegExp String print load gc MinKey MaxKey Mongo NumberInt NumberLong ObjectId DBPointer UUID BinData HexData MD5 Map Timestamp JSON"
-                    .split(' ');
-    if (typeof NumberDecimal !== 'undefined') {
-        extraGlobals[extraGlobals.length] = "NumberDecimal";
+    var ofs = 'Z';
+    if (!Date.printAsUTC) {
+        var ofsmin = this.getTimezoneOffset();
+        if (ofsmin !== 0){
+            ofs = ofsmin > 0 ? '-' : '+'; // This is correct
+            ofs += (ofsmin/60).zeroPad(2);
+            ofs += (ofsmin%60).zeroPad(2);
+        }
     }
 
-    var isPrivate = function(name) {
-        if (shellAutocomplete.showPrivate)
-            return false;
-        if (name == '_id')
-            return false;
-        if (name[0] == '_')
-            return true;
-        if (name[name.length - 1] == '_')
-            return true;  // some native functions have an extra name_ method
-        return false;
-    };
+    var isodate =  colorize('"' + [year, month, date].join('-') + 'T' + hour +':' + minute + ':' + sec + ofs + '"', "cyan");
+    return 'ISODate(' + isodate + ')';
+};
 
-    var customComplete = function(obj) {
-        try {
-            if (obj.__proto__.constructor.autocomplete) {
-                var ret = obj.constructor.autocomplete(obj);
-                if (ret.constructor != Array) {
-                    print("\nautocompleters must return real Arrays");
-                    return [];
-                }
-                return ret;
+Array.tojson = function( a , indent , nolint ){
+    var lineEnding = nolint ? " " : "\n";
+
+    if (!indent)
+        indent = "";
+
+    if ( nolint )
+        indent = "";
+
+    if (a.length === 0) {
+        return "[ ]";
+    }
+
+    var s = "[" + lineEnding;
+    indent += __indent;
+    for ( var i=0; i<a.length; i++){
+        s += indent + tojson( a[i], indent , nolint );
+        if ( i < a.length - 1 ){
+            s += "," + lineEnding;
+        }
+    }
+    if ( a.length === 0 ) {
+        s += indent;
+    }
+
+    indent = indent.substring(__indent.length);
+    s += lineEnding+indent+"]";
+    return s;
+};
+
+NumberLong.prototype.tojson = function() {
+    return 'NumberLong(' + colorize('"' + this.toString().match(/-?\d+/)[0] + '"', "red") + ')';
+};
+
+NumberInt.prototype.tojson = function() {
+    return 'NumberInt(' + colorize('"' + this.toString().match(/-?\d+/)[0] + '"', "red") + ')';
+};
+
+BinData.prototype.tojson = function(indent , nolint) {
+    if (this.subtype() === 3) {
+        return 'UUID(' + colorize('"' + uuidToString(this) + '"', "cyan") + ', ' + colorize('"' + mongo_hacker_config['uuid_type'] + '"', "cyan") + ')'
+    } else if (this.subtype() === 4) {
+        return 'UUID(' + colorize('"' + uuidToString(this, "default") + '"', "cyan") + ')'
+    } else {
+        return 'BinData(' + colorize(this.subtype(), "red") + ', ' + colorize('"' + this.base64() + '"', "green", true) + ')';
+    }
+};
+
+DBQuery.prototype.shellPrint = function(){
+    try {
+        var start = new Date().getTime();
+        var n = 0;
+        while ( this.hasNext() && n < DBQuery.shellBatchSize ){
+            var s = this._prettyShell ? tojson( this.next() ) : tojson( this.next() , "" , true );
+            print( s );
+            n++;
+        }
+
+        var output = [];
+
+        if (typeof _verboseShell !== 'undefined' && _verboseShell) {
+            var time = new Date().getTime() - start;
+            var slowms = getSlowms();
+            var fetched = "Fetched " + n + " record(s) in ";
+            if (time > slowms) {
+                fetched += colorize(time + "ms", "red", true);
             } else {
-                return [];
+                fetched += colorize(time + "ms", "green", true);
             }
-        } catch (e) {
-            // print( e ); // uncomment if debugging custom completers
-            return [];
+            output.push(fetched);
         }
-    };
 
-    var printMatches = function(){
-        print('\n')
-        matches.forEach(function(m, i){
-            var str = i + ': ' + m
-            print(colorize(str, 'green', true, false));
-        });
+        var paranoia = mongo_hacker_config.index_paranoia;
+
+        if (typeof paranoia !== 'undefined' && paranoia) {
+            var explain = this.clone();
+            explain._ensureSpecial();
+            explain._query.$explain = true;
+            explain._limit = Math.abs(n._limit) * -1;
+            var result = explain.next();
+            var type = result.cursor;
+
+            if (type !== undefined) {
+                var index_use = "Index[";
+                if (type == "BasicCursor") {
+                    index_use += colorize( "none", "red", true);
+                } else {
+                    index_use += colorize( result.cursor.substring(12), "green", true );
+                }
+                index_use += "]";
+                output.push(index_use);
+            }
+        }
+
+        if ( this.hasNext() ) {
+            ___it___  = this;
+            output.push("More[" + colorize("true", "green", true) + "]");
+        }
+        print(output.join(" -- "));
+    }
+    catch ( e ){
+        print( e );
+    }
+};
+
+tojsonObject = function( x, indent, nolint ) {
+    var lineEnding = nolint ? " " : "\n";
+    var tabSpace = nolint ? "" : __indent;
+
+    assert.eq( ( typeof x ) , "object" , "tojsonObject needs object, not [" + ( typeof x ) + "]" );
+
+    if (!indent)
+        indent = "";
+
+    if ( typeof( x.tojson ) == "function" && x.tojson != tojson ) {
+        return x.tojson(indent,nolint);
     }
 
-    var convertOperators = function(str){
-        return str.replace('eq', '=')
-                .replace('gte', '>=')
-                .replace('lt', '<=')
-                .replace('gt', '>')
-                .replace('lt', '<')
-                .replace('ne', '!=')
-                .replace('%', ' like ');
+    if ( x.constructor && typeof( x.constructor.tojson ) == "function" && x.constructor.tojson != tojson ) {
+        return x.constructor.tojson( x, indent , nolint );
     }
 
-    var worker = function(prefix) {
-        var global = (function() {
-            return this;
-        }).call();  // trick to get global object
+    if ( x.toString() == "[object MaxKey]" )
+        return "{ $maxKey : 1 }";
+    if ( x.toString() == "[object MinKey]" )
+        return "{ $minKey : 1 }";
 
-        if (prefix.length === 0){ // space only
-            return ["')"];
+    var s = "{" + lineEnding;
+
+    // push one level of indent
+    indent += tabSpace;
+
+    var total = 0;
+    for ( var k in x ) total++;
+    if ( total === 0 ) {
+        s += indent + lineEnding;
+    }
+
+    var keys = x;
+    if ( typeof( x._simpleKeys ) == "function" )
+        keys = x._simpleKeys();
+    var num = 1;
+    for ( var key in keys ){
+
+        var val = x[key];
+        if ( val == DB.prototype || val == DBCollection.prototype )
+            continue;
+
+        s += indent + colorize("\"" + key + "\"", "yellow") + ": " + tojson( val, indent , nolint );
+        if (num != total) {
+            s += ",";
+            num++;
         }
+        s += lineEnding;
+    }
 
-        var curObj = global;
-        var parts = prefix.split('.');
-        var first = parts[0];
-        var lastChar = first.substring(first.length - 1, first.length);
-        var lastTwoChars = first.substring(first.length - 2, first.length);
+    // pop one level of indent
+    indent = indent.substring(__indent.length);
+    return s + indent + "}";
+};
 
-        // Example of customized completion code
-        // ************************************************
 
-        if (first.trim() === 'sd'){
-            sqlQuery = "select * from ";
-            return [sqlQuery];
-        } else if (first === 'sel'){
-            sqlQuery = "db.sql('select * from ";
-            return [sqlQuery];
-        } else if (first === 'w'){
-            return ['where'];
-        } else if (first === 'qq'){
-            resetGlobalVars();
-            return [''];
-        } else if (first === 'sc'){
-            return ['sc()'];
-        } else if (first === 'uv'){
-            return ['use video'];
-        } else if (!queryHasCollection && isNaN(lastChar) && lastChar !== '_') {
-            if (_.contains(collections, first)){
-                selectedCollection = first;
-                sqlQuery += selectedCollection;
+tojson = function( x, indent , nolint ) {
+    if ( x === null )
+        return colorize("null", "red", true);
 
-                return [selectedCollectiond];
+    if ( x === undefined )
+        return colorize("undefined", "magenta", true);
+
+    if ( x.isObjectId ) {
+        return 'ObjectId(' + colorize('"' + x.str + '"', "green", false, true) + ')';
+    }
+
+    if (!indent)
+        indent = "";
+
+    var s;
+    switch ( typeof x ) {
+        case "string": {
+            s = "\"";
+            for ( var i=0; i<x.length; i++ ){
+                switch (x[i]){
+                    case '"': s += '\\"'; break;
+                    case '\\': s += '\\\\'; break;
+                    case '\b': s += '\\b'; break;
+                    case '\f': s += '\\f'; break;
+                    case '\n': s += '\\n'; break;
+                    case '\r': s += '\\r'; break;
+                    case '\t': s += '\\t'; break;
+
+                    default: {
+                        var code = x.charCodeAt(i);
+                        if (code < 0x20){
+                            s += (code < 0x10 ? '\\u000' : '\\u00') + code.toString(16);
+                        } else {
+                            s += x[i];
+                        }
+                    }
+                }
             }
-
-            matches = _.filter(collections, function(c){
-                return c.substring(0, (first.length)) === first;
-            });
-
-            printMatches();
-        } else if (!queryHasCollection && lastChar !== '_') {
-            var num = !isNaN(lastTwoChars) ? lastTwoChars : lastChar;
-            selectedCollection = matches[num];
-            queryHasCollection = true;
-            print('\n');
-            generateFieldTable(selectedCollection);
-
-            if (sqlQuery === ''){
-                sqlQuery = "db.sql('select * from " + selectedCollection;
-                return [sqlQuery];
+            s += "\"";
+            return colorize(s, "green", true);
+        }
+        case "number":
+            return colorize(x, "red");
+        case "boolean":
+            return colorize("" + x, "blue");
+        case "object": {
+            s = tojsonObject( x, indent , nolint );
+            if ( ( nolint === null || nolint === true ) && s.length < 80 && ( indent === null || indent.length === 0 ) ){
+                s = s.replace( /[\s\r\n ]+/gm , " " );
             }
-
-            sqlQuery += selectedCollection;
-            return [selectedCollection];
-        } else if (queryHasCollection && isNaN(lastChar) && lastChar !== '_') {
-
-            matches = collectionFields.filter(function(a) {
-                return a.collection === selectedCollection
-            }).filter(function(c){
-                return c.field.substring(0, (first.length)) === first;
-            }).sort(function(f1, f2) {
-                return f1.field > f2.field
-            }).map(function(d, i) { return d.field });
-
-            printMatches();
-        } else if (lastChar !== '_') {
-            var num = !isNaN(lastTwoChars) ? lastTwoChars : lastChar;
-            var field = matches[num];
-
-            return [field];
-        } else {
-            var part = convertOperators(first);
-            sqlQuery += part.replace('_', '');
-            resetGlobalVars();
-
-            return [''];
+            return s;
         }
+        case "function":
+            return colorize(x.toString(), "magenta");
+        default:
+            throw "tojson can't handle type " + ( typeof x );
+    }
+
+};
 
 
-        // ************************************************
-
-        for (var p = 0; p < parts.length - 1; p++) {  // doesn't include last part
-            curObj = curObj[parts[p]];
-            if (curObj == null)
-                return [];
-        }
-
-        var lastPrefix = parts[parts.length - 1] || '';
-        var lastPrefixLowercase = lastPrefix.toLowerCase();
-        var beginning = parts.slice(0, parts.length - 1).join('.');
-        if (beginning.length)
-            beginning += '.';
-        
-        var possibilities = [];
-
-        var noDuplicates =
-        {};  // see http://dreaminginjavascript.wordpress.com/2008/08/22/eliminating-duplicates/
-        for (var i = 0; i < possibilities.length; i++) {
-            var p = possibilities[i];
-            if (typeof(curObj[p]) == "undefined" && curObj != global)
-                continue;  // extraGlobals aren't in the global object
-            if (p.length == 0 || p.length < lastPrefix.length)
-                continue;
-            if (lastPrefix[0] != '_' && isPrivate(p))
-                continue;
-            if (p.match(/^[0-9]+$/))
-                continue;  // don't array number indexes
-            if (p.substr(0, lastPrefix.length).toLowerCase() != lastPrefixLowercase)
-                continue;
-
-            var completion = beginning + p;
-            if (curObj[p] && curObj[p].constructor == Function && p != 'constructor')
-                completion += '(';
-
-            noDuplicates[completion] = 0;
-        }
-
-        var ret = [];
-        for (var i in noDuplicates)
-            ret.push(i);
-
-        return ret;
-    };
-
-    // this is the actual function that gets assigned to shellAutocomplete
-    return function(prefix) {
-        try {
-            __autocomplete__ = worker(prefix).sort();
-        } catch (e) {
-            print("exception during autocomplete: " + tojson(e.message));
-            __autocomplete__ = [];
-        }
-    };
-}();
-
-
-
-
-// -------------------------------------------------- Collection Fields (from Variety.js) -------------------------------------------------- 
-
-collectionFields = [
-    { collection: 'movieDetails', field: '_id', types: 'ObjectId' },
-    { collection: 'movieDetails', field: 'actors', types: 'Array' },
-    { collection: 'movieDetails', field: 'awards', types: 'Object' },
-    { collection: 'movieDetails', field: 'awards.nominations', types: 'Number' },
-    { collection: 'movieDetails', field: 'awards.text', types: 'String' },
-    { collection: 'movieDetails', field: 'awards.wins', types: 'Number' },
-    { collection: 'movieDetails', field: 'countries', types: 'Array' },
-    { collection: 'movieDetails', field: 'director', types: 'String (2113),null (182)' },
-    { collection: 'movieDetails', field: 'genres', types: 'Array' },
-    { collection: 'movieDetails', field: 'imdb', types: 'Object' },
-    { collection: 'movieDetails', field: 'imdb.id', types: 'String' },
-    { collection: 'movieDetails', field: 'imdb.rating', types: 'Number (1711),null (584)' },
-    { collection: 'movieDetails', field: 'imdb.votes', types: 'Number (1710),null (585)' },
-    { collection: 'movieDetails', field: 'plot', types: 'String (1550),null (745)' },
-    { collection: 'movieDetails', field: 'poster', types: 'String (1044),null (1251)' },
-    { collection: 'movieDetails', field: 'rated', types: 'String (696),null (1599)' },
-    { collection: 'movieDetails', field: 'released', types: 'Date (1840),null (455)' },
-    { collection: 'movieDetails', field: 'runtime', types: 'Number (1863),null (432)' },
-    { collection: 'movieDetails', field: 'title', types: 'String' },
-    { collection: 'movieDetails', field: 'type', types: 'String' },
-    { collection: 'movieDetails', field: 'writers', types: 'Array' },
-    { collection: 'movieDetails', field: 'year', types: 'Number' },
-    { collection: 'movieDetails', field: 'metacritic', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato', types: 'Object (362),null (14)' },
-    { collection: 'movieDetails', field: 'tomato.fresh', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato.image', types: 'String' },
-    { collection: 'movieDetails', field: 'tomato.meter', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato.rating', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato.reviews', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato.userMeter', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato.userRating', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato.userReviews', types: 'Number' },
-    { collection: 'movieDetails', field: 'tomato.consensus', types: 'String (304),null (45)' },
-    { collection: 'movieDetails', field: 'awards.oscars', types: 'Array' },
-    { collection: 'movieDetails', field: 'awards.oscars.XX.bestAnimatedFeature', types: 'String' },
-    { collection: 'movieDetails', field: 'awards.oscars.XX.bestMusic', types: 'String' },
-    { collection: 'movieDetails', field: 'awards.oscars.XX.bestPicture', types: 'String' },
-    { collection: 'movieDetails', field: 'awards.oscars.XX.bestScreenplay', types: 'String' },
-    { collection: 'movieDetails', field: 'awards.oscars.XX.bestSoundEditing', types: 'String' },
-    { collection: 'movies', field: '_id', types: 'ObjectId' },
-    { collection: 'movies', field: 'imdb', types: 'String' },
-    { collection: 'movies', field: 'title', types: 'String' },
-    { collection: 'movies', field: 'type', types: 'String' },
-    { collection: 'movies', field: 'year', types: 'Number' },
-    { collection: 'moviesScratch', field: '_id', types: 'ObjectId (4),String (4)' },
-    { collection: 'moviesScratch', field: 'title', types: 'String' },
-    { collection: 'moviesScratch', field: 'type', types: 'String' },
-    { collection: 'moviesScratch', field: 'year', types: 'Number' },
-    { collection: 'moviesScratch', field: 'imdb', types: 'String' },    
-    { collection: 'reviews', field: '_id', types: 'ObjectId' },
-    { collection: 'reviews', field: 'date', types: 'Date' },
-    { collection: 'reviews', field: 'rating', types: 'Number' },
-    { collection: 'reviews', field: 'reviewer', types: 'String' },
-    { collection: 'reviews', field: 'text', types: 'String' },
-];
-
-// ------------------------------------------------- ascii-table.min.js -------------------------------------------------
+// ######## ascii-table.min.js ########
 // https://github.com/sorensen/ascii-table
 
 !function(){"use strict";function t(t,e){this.options=e||{},this.reset(t)}var e=Array.prototype.slice,i=Object.prototype.toString;t.VERSION="0.0.8",t.LEFT=0,t.CENTER=1,t.RIGHT=2,t.factory=function(e,i){return new t(e,i)},t.align=function(e,i,r,n){return e===t.LEFT?t.alignLeft(i,r,n):e===t.RIGHT?t.alignRight(i,r,n):e===t.CENTER?t.alignCenter(i,r,n):t.alignAuto(i,r,n)},t.alignLeft=function(t,e,i){if(!e||0>e)return"";(void 0===t||null===t)&&(t=""),"undefined"==typeof i&&(i=" "),"string"!=typeof t&&(t=t.toString());var r=e+1-t.length;return 0>=r?t:t+Array(e+1-t.length).join(i)},t.alignCenter=function(e,i,r){if(!i||0>i)return"";(void 0===e||null===e)&&(e=""),"undefined"==typeof r&&(r=" "),"string"!=typeof e&&(e=e.toString());var n=e.length,o=Math.floor(i/2-n/2),s=Math.abs(n%2-i%2),i=e.length;return t.alignRight("",o,r)+e+t.alignLeft("",o+s,r)},t.alignRight=function(t,e,i){if(!e||0>e)return"";(void 0===t||null===t)&&(t=""),"undefined"==typeof i&&(i=" "),"string"!=typeof t&&(t=t.toString());var r=e+1-t.length;return 0>=r?t:Array(e+1-t.length).join(i)+t},t.alignAuto=function(e,r,n){(void 0===e||null===e)&&(e="");var o=i.call(e);if(n||(n=" "),r=+r,"[object String]"!==o&&(e=e.toString()),e.length<r)switch(o){case"[object Number]":return t.alignRight(e,r,n);default:return t.alignLeft(e,r,n)}return e},t.arrayFill=function(t,e){for(var i=new Array(t),r=0;r!==t;r++)i[r]=e;return i},t.prototype.reset=t.prototype.clear=function(e){return this.__name="",this.__nameAlign=t.CENTER,this.__rows=[],this.__maxCells=0,this.__aligns=[],this.__colMaxes=[],this.__spacing=1,this.__heading=null,this.__headingAlign=t.CENTER,this.setBorder(),"[object String]"===i.call(e)?this.__name=e:"[object Object]"===i.call(e)&&this.fromJSON(e),this},t.prototype.setBorder=function(t,e,i,r){return this.__border=!0,1===arguments.length&&(e=i=r=t),this.__edge=t||"|",this.__fill=e||"-",this.__top=i||".",this.__bottom=r||"'",this},t.prototype.removeBorder=function(){return this.__border=!1,this.__edge=" ",this.__fill=" ",this},t.prototype.setAlign=function(t,e){return this.__aligns[t]=e,this},t.prototype.setTitle=function(t){return this.__name=t,this},t.prototype.getTitle=function(){return this.__name},t.prototype.setTitleAlign=function(t){return this.__nameAlign=t,this},t.prototype.sort=function(t){return this.__rows.sort(t),this},t.prototype.sortColumn=function(t,e){return this.__rows.sort(function(i,r){return e(i[t],r[t])}),this},t.prototype.setHeading=function(t){return(arguments.length>1||"[object Array]"!==i.call(t))&&(t=e.call(arguments)),this.__heading=t,this},t.prototype.getHeading=function(){return this.__heading.slice()},t.prototype.setHeadingAlign=function(t){return this.__headingAlign=t,this},t.prototype.addRow=function(t){return(arguments.length>1||"[object Array]"!==i.call(t))&&(t=e.call(arguments)),this.__maxCells=Math.max(this.__maxCells,t.length),this.__rows.push(t),this},t.prototype.getRows=function(){return this.__rows.slice().map(function(t){return t.slice()})},t.prototype.addRowMatrix=function(t){for(var e=0;e<t.length;e++)this.addRow(t[e]);return this},t.prototype.addData=function(t,e,r){if("[object Array]"!==i.call(t))return this;for(var n=0,o=t.length;o>n;n++){var s=e(t[n]);r?this.addRowMatrix(s):this.addRow(s)}return this},t.prototype.clearRows=function(){return this.__rows=[],this.__maxCells=0,this.__colMaxes=[],this},t.prototype.setJustify=function(t){return 0===arguments.length&&(t=!0),this.__justify=!!t,this},t.prototype.toJSON=function(){return{title:this.getTitle(),heading:this.getHeading(),rows:this.getRows()}},t.prototype.parse=t.prototype.fromJSON=function(t){return this.clear().setTitle(t.title).setHeading(t.heading).addRowMatrix(t.rows)},t.prototype.render=t.prototype.valueOf=t.prototype.toString=function(){for(var e,i=this,r=[],n=this.__maxCells,o=t.arrayFill(n,0),s=3*n,h=this.__rows,a=this.__border,l=this.__heading?[this.__heading].concat(h):h,_=0;_<l.length;_++)for(var u=l[_],g=0;n>g;g++){var p=u[g];o[g]=Math.max(o[g],p?p.toString().length:0)}this.__colMaxes=o,e=this.__justify?Math.max.apply(null,o):0,o.forEach(function(t){s+=e?e:t+i.__spacing}),e&&(s+=o.length),s-=this.__spacing,a&&r.push(this._seperator(s-n+1,this.__top)),this.__name&&(r.push(this._renderTitle(s-n+1)),a&&r.push(this._seperator(s-n+1))),this.__heading&&(r.push(this._renderRow(this.__heading," ",this.__headingAlign)),r.push(this._rowSeperator(n,this.__fill)));for(var _=0;_<this.__rows.length;_++)r.push(this._renderRow(this.__rows[_]," "));a&&r.push(this._seperator(s-n+1,this.__bottom));var f=this.options.prefix||"";return f+r.join("\n"+f)},t.prototype._seperator=function(e,i){return i||(i=this.__edge),i+t.alignRight(i,e,this.__fill)},t.prototype._rowSeperator=function(){var e=t.arrayFill(this.__maxCells,this.__fill);return this._renderRow(e,this.__fill)},t.prototype._renderTitle=function(e){var i=" "+this.__name+" ",r=t.align(this.__nameAlign,i,e-1," ");return this.__edge+r+this.__edge},t.prototype._renderRow=function(e,i,r){for(var n=[""],o=this.__colMaxes,s=0;s<this.__maxCells;s++){var h=e[s],a=this.__justify?Math.max.apply(null,o):o[s],l=a,_=this.__aligns[s],u=r,g="alignAuto";"undefined"==typeof r&&(u=_),u===t.LEFT&&(g="alignLeft"),u===t.CENTER&&(g="alignCenter"),u===t.RIGHT&&(g="alignRight"),n.push(t[g](h,l,i))}var p=n.join(i+this.__edge+i);return p=p.substr(1,p.length),p+i+this.__edge},["Left","Right","Center"].forEach(function(i){var r=t[i.toUpperCase()];["setAlign","setTitleAlign","setHeadingAlign"].forEach(function(n){t.prototype[n+i]=function(){var t=e.call(arguments).concat(r);return this[n].apply(this,t)}})}),"undefined"!=typeof exports?module.exports=t:this.AsciiTable=t}.call(this);
+
+// ########  Northwind collection Fields (output generated from Variety.js) ########
+
+collectionFields = [
+    { collection: 'categories', field: 'CategoryID', types: 'Number' },
+    { collection: 'categories', field: 'CategoryName', types: 'String' },
+    { collection: 'categories', field: 'Description', types: 'String' },
+    { collection: 'categories', field: 'Picture', types: 'String' },
+    { collection: 'categories', field: '_id', types: 'ObjectId' },
+    { collection: 'categories', field: 'field4', types: 'String' },
+    { collection: 'categories', field: 'field5', types: 'String' },
+    { collection: 'categories', field: 'field6', types: 'String' },
+    { collection: 'categories', field: 'field7', types: 'String' },
+    { collection: 'shippers', field: 'CompanyName', types: 'String' },
+    { collection: 'shippers', field: 'Phone', types: 'String' },
+    { collection: 'shippers', field: 'ShipperID', types: 'Number' },
+    { collection: 'shippers', field: '_id', types: 'ObjectId' },
+    { collection: 'regions', field: 'RegionDescription', types: 'String' },
+    { collection: 'regions', field: 'RegionID', types: 'Number' },
+    { collection: 'regions', field: '_id', types: 'ObjectId' },
+    { collection: 'products', field: 'CategoryID', types: 'Number' },
+    { collection: 'products', field: 'Discontinued', types: 'Number' },
+    { collection: 'products', field: 'ProductID', types: 'Number' },
+    { collection: 'products', field: 'ProductName', types: 'String' },
+    { collection: 'products', field: 'QuantityPerUnit', types: 'String' },
+    { collection: 'products', field: 'ReorderLevel', types: 'Number' },
+    { collection: 'products', field: 'SupplierID', types: 'Number' },
+    { collection: 'products', field: 'UnitPrice', types: 'Number' },
+    { collection: 'products', field: 'UnitsInStock', types: 'Number' },
+    { collection: 'products', field: 'UnitsOnOrder', types: 'Number' },
+    { collection: 'products', field: '_id', types: 'ObjectId' },
+    { collection: 'territories', field: 'RegionID', types: 'Number' },
+    { collection: 'territories', field: 'TerritoryDescription', types: 'String' },
+    { collection: 'territories', field: 'TerritoryID', types: 'Number' },
+    { collection: 'territories', field: '_id', types: 'ObjectId' },
+    { collection: 'suppliers', field: 'Address', types: 'String (27),Number (2)' },
+    { collection: 'suppliers', field: 'City', types: 'String (27),Number (2)' },
+    { collection: 'suppliers', field: 'CompanyName', types: 'String' },
+    { collection: 'suppliers', field: 'ContactName', types: 'String' },
+    { collection: 'suppliers', field: 'ContactTitle', types: 'String' },
+    { collection: 'suppliers', field: 'Country', types: 'String (21),Number (8)' },
+    { collection: 'suppliers', field: 'Fax', types: 'String (28),Number (1)' },
+    { collection: 'suppliers', field: 'HomePage', types: 'String' },
+    { collection: 'suppliers', field: 'Phone', types: 'String (28),Number (1)' },
+    { collection: 'suppliers', field: 'PostalCode', types: 'String (15),Number (14)' },
+    { collection: 'suppliers', field: 'Region', types: 'String' },
+    { collection: 'suppliers', field: 'SupplierID', types: 'Number' },
+    { collection: 'suppliers', field: '_id', types: 'ObjectId' },
+    { collection: 'suppliers', field: 'field12', types: 'String' },
+    { collection: 'customers', field: 'Address', types: 'String (82),Number (9)' },
+    { collection: 'customers', field: 'City', types: 'String (76),Number (15)' },
+    { collection: 'customers', field: 'CompanyName', types: 'String' },
+    { collection: 'customers', field: 'ContactName', types: 'String' },
+    { collection: 'customers', field: 'ContactTitle', types: 'String' },
+    { collection: 'customers', field: 'Country', types: 'String (77),Number (14)' },
+    { collection: 'customers', field: 'CustomerID', types: 'String' },
+    { collection: 'customers', field: 'Fax', types: 'String' },
+    { collection: 'customers', field: 'Phone', types: 'String' },
+    { collection: 'customers', field: 'PostalCode', types: 'String (39),Number (52)' },
+    { collection: 'customers', field: 'Region', types: 'String' },
+    { collection: 'customers', field: '_id', types: 'ObjectId' },
+    { collection: 'customers', field: 'field11', types: 'String' },
+    { collection: 'orders', field: 'CustomerID', types: 'String' },
+    { collection: 'orders', field: 'EmployeeID', types: 'Number' },
+    { collection: 'orders', field: 'Freight', types: 'Number' },
+    { collection: 'orders', field: 'OrderDate', types: 'String' },
+    { collection: 'orders', field: 'OrderID', types: 'Number' },
+    { collection: 'orders', field: 'RequiredDate', types: 'String' },
+    { collection: 'orders', field: 'ShipAddress', types: 'String (772),Number (58)' },
+    { collection: 'orders', field: 'ShipCity', types: 'String (712),Number (118)' },
+    { collection: 'orders', field: 'ShipCountry', types: 'String (749),Number (81)' },
+    { collection: 'orders', field: 'ShipName', types: 'String' },
+    { collection: 'orders', field: 'ShipPostalCode', types: 'Number (498),String (332)' },
+    { collection: 'orders', field: 'ShipRegion', types: 'String' },
+    { collection: 'orders', field: 'ShipVia', types: 'Number' },
+    { collection: 'orders', field: 'ShippedDate', types: 'String' },
+    { collection: 'orders', field: '_id', types: 'ObjectId' },
+    { collection: 'orders', field: 'field14', types: 'String' },
+    { collection: 'order-details', field: 'Discount', types: 'Number' },
+    { collection: 'order-details', field: 'OrderID', types: 'Number' },
+    { collection: 'order-details', field: 'ProductID', types: 'Number' },
+    { collection: 'order-details', field: 'Quantity', types: 'Number' },
+    { collection: 'order-details', field: 'UnitPrice', types: 'Number' },
+    { collection: 'order-details', field: '_id', types: 'ObjectId' },
+    { collection: 'northwind', field: 'CustomerID', types: 'Number (2091),String (909)' },
+    { collection: 'northwind', field: 'EmployeeID', types: 'Number (2998),String (2)' },
+    { collection: 'northwind', field: 'OrderDate', types: 'Number (2168),String (832)' },
+    { collection: 'northwind', field: 'OrderID', types: 'Number (2998),String (2)' },
+    { collection: 'northwind', field: 'RequiredDate', types: 'Number (2091),String (909)' },
+    { collection: 'northwind', field: '_id', types: 'ObjectId' },
+    { collection: 'northwind', field: 'Freight', types: 'Number (907),String (1)' },
+    { collection: 'northwind', field: 'ShipAddress', types: 'Number (135),String (773)' },
+    { collection: 'northwind', field: 'ShipName', types: 'Number (77),String (831)' },
+    { collection: 'northwind', field: 'ShipVia', types: 'Number (907),String (1)' },
+    { collection: 'northwind', field: 'ShippedDate', types: 'Number (77),String (831)' },
+    { collection: 'northwind', field: 'ShipCity', types: 'Number (118),String (712)' },
+    { collection: 'northwind', field: 'ShipCountry', types: 'String (749),Number (81)' },
+    { collection: 'northwind', field: 'ShipPostalCode', types: 'String (332),Number (498)' },
+    { collection: 'northwind', field: 'ShipRegion', types: 'String' },
+    { collection: 'northwind', field: 'field14', types: 'String' },
+];
+
+collections = _.uniq(_.pluck(collectionFields, 'collection'));
