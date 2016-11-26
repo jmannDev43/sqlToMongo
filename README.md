@@ -23,6 +23,7 @@ Currently queries only support:
 - Basic filtering (`=`, `<`, `>`, `<=`, `>=`), `and`, `or`, `in`, `like`, ...
 - Not equal to (use `!=` operator ...`db.sql('select * from collection where field != value)`)
 - Not in (use `!in` operator and simply separate values by a comma, with no parentheses).  E.g. `db.sql('select * from collection where field !in value,value)`) 
+- Projection (simply list fields after the `select` keyword.  To explicitly exclude fields, precede fieldnames with `!` like so: `db.sql(select !field1, !field2 from collection`.
 - Top N `db.sql('select top 20 * from collection)`
 - Order by (delimit conditions by comma)  `db.sql('select * from collection order by field1 asc, field2 desc)`
     
@@ -42,6 +43,8 @@ As an example, the sample Northwind database (credit to tmcnab https://github.co
 1. Once the database has been imported, type `nw` and press tab.  You should see it expand to `use Northwind`
 2. Now, type `sel`and press tab.  You should see that expand to `db.select * from `
 3. Next, type `o` and tab.  You should see a list of all the collections that begin with `o` (in this case **order-details** and **orders**).
+
+- You can also skip `sel` and type the first letter(s) of the collection (in this case `o`) to bring up the same prompt.  After a collection is selected, the terminal will populate with `db.sql(select * from [selected collection]`.
 
 ![Image of output](./collection_selection.png)
 
