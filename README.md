@@ -23,7 +23,7 @@ Currently queries only support:
 - Basic filtering (`=`, `<`, `>`, `<=`, `>=`), `and`, `or`, `in`, `like`, ...
 - Not equal to (use `!=` operator ...`db.sql('select * from collection where field != value)`)
 - Not in (use `!in` operator and simply separate values by a comma, with no parentheses).  E.g. `db.sql('select * from collection where field !in value,value)`) 
-- Projection (simply list fields after the `select` keyword.  To explicitly exclude fields, precede fieldnames with `!` like so: `db.sql(select !field1, !field2 from collection`.
+- Projection (simply list fields after the `select` keyword.  To explicitly exclude fields, precede fieldnames with `!` like so: `db.sql(select !field1, !field2 from collection)`.
 - Top N `db.sql('select top 20 * from collection)`
 - Order by (delimit conditions by comma)  `db.sql('select * from collection order by field1 asc, field2 desc)`
     
