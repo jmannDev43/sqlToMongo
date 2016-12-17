@@ -2,6 +2,7 @@
 
 #### Personal project to query using standard SQL in Mongo shell and have it converted to MongoDB queries, with custom tab completion (WIP).
 
+![Illustration gif](./sqlToMongo.gif)
    
 ### Querying   
 --------------------------
