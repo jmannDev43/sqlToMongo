@@ -70,6 +70,7 @@ As an example, the sample Northwind database (credit to tmcnab https://github.co
 ##### Replacing example collection info
   
 To generate collection information for your own database (replicasets not currently supported):
+
 1. Open Terminal and cd into this project directory. 
 2. Run `sudo mkdir /usr/local/scripts` to create a **scripts** directory inside /usr/local.
     - This will allow **.mongorc.js** to access script files.
@@ -77,7 +78,7 @@ To generate collection information for your own database (replicasets not curren
 4. Install node.js (https://nodejs.org), if you haven't already and run `npm install` to install dependencies.
 5. Run `node getSchema.js HOSTNAME PORT DATABASE_NAME`
     * Example: `node getSchema.js localhost 27017 Northwind`
-* This script will run your database through the variety.js schema analyzer (https://github.com/variety/variety) and save the output to **usr/local/scripts/dbInfo.js**.
+    * This script will run your database through the variety.js schema analyzer (https://github.com/variety/variety) and save the output to **usr/local/scripts/dbInfo.js**.
 
 ##### Replacing / Adding custom auto-completions
 
