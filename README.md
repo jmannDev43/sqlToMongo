@@ -63,6 +63,7 @@ As an example, the sample Northwind database (credit to tmcnab https://github.co
 4. Finally, complete the query and remember to add the closing quote and parenthesis (which can also be auto-completed by tabbing after space).
 
 ### Installation
+----------------------------
 
 * Copy **.mongorc.js** into your home directory `cp .mongorc.js ~` 
 
