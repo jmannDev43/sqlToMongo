@@ -1,0 +1,30 @@
+{
+  "name": "sql-to-mongo",
+  "version": "1.0.0",
+  "description": "#### Personal project to query MongoDB using standard SQL in Mongo shell, with custom tab completion (WIP).",
+  "main": "getSchema.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmannDev43/sqlToMongo.git"
+  },
+  "keywords": [
+    "sql",
+    "mongo",
+    "auto-complete"
+  ],
+  "author": "Josh Mann",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jmannDev43/sqlToMongo/issues"
+  },
+  "homepage": "https://github.com/jmannDev43/sqlToMongo#readme",
+  "dependencies": {
+    "child-process": "^1.0.2",
+    "jsonfile": "^2.4.0",
+    "mongodb": "^2.2.19",
+    "underscore": "^1.8.3"
+  }
+}

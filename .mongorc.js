@@ -2,6 +2,11 @@
 // See https://www.skratchdot.com/projects/mesh/
 load('/usr/local/scripts/mesh.js');
 
+// ########  Will load collectionFields variable (Northwind json output generated from Variety.js) ########
+load('/usr/local/scripts/dbInfo.js');
+
+collections = _.keys(collectionFields);
+
 prompt = function () {
     return db + ' : ' + (new Date()).toLocaleDateString() + ' @ ' + (new Date()).toLocaleTimeString() + '> ';
 }
@@ -354,13 +359,13 @@ function selectCollection(lastTwoChars, lastChar){
 
 function printFields(first){
     // collection has been selected and user is trying to select field based on initial string
-    matches = collectionFields.filter(function(a) {
-        return a.collection === selectedCollection
-    }).filter(function(c){
+    var collection = collectionFields[selectedCollection];
+    var filteredFields = _.filter(collection, function(c){
         return c.field.toLowerCase().substring(0, (first.length)) === first;
-    }).sort(function(f1, f2) {
-        return f1.field > f2.field
-    }).map(function(d, i) { return d.field });
+    });
+    matches = _.map(_.sortBy(filteredFields, 'field'), function(d, i) {
+        return d.field;
+    });
 
     printMatches();
 }
@@ -387,11 +392,9 @@ function resetGlobalVars (){
 function generateFieldTable(collection){
     var table = new AsciiTable(collection);
     table.setHeading('#', 'Field', 'Types');
-    collectionFields.filter(function(a) {
-        return a.collection === collection
-    }).sort(function(f1, f2) {
-        return f1.field > f2.field
-    }).map(function(d, i) {
+
+    var fields = collectionFields[collection];
+    _.map(_.sortBy(fields, 'field'), function(d, i) {
         return table.addRow(i, d.field, d.types)
     });
     return print(colorize(table, 'cyan', true, false));
@@ -909,106 +912,3 @@ tojson = function( x, indent , nolint ) {
 // https://github.com/sorensen/ascii-table
 
 !function(){"use strict";function t(t,e){this.options=e||{},this.reset(t)}var e=Array.prototype.slice,i=Object.prototype.toString;t.VERSION="0.0.8",t.LEFT=0,t.CENTER=1,t.RIGHT=2,t.factory=function(e,i){return new t(e,i)},t.align=function(e,i,r,n){return e===t.LEFT?t.alignLeft(i,r,n):e===t.RIGHT?t.alignRight(i,r,n):e===t.CENTER?t.alignCenter(i,r,n):t.alignAuto(i,r,n)},t.alignLeft=function(t,e,i){if(!e||0>e)return"";(void 0===t||null===t)&&(t=""),"undefined"==typeof i&&(i=" "),"string"!=typeof t&&(t=t.toString());var r=e+1-t.length;return 0>=r?t:t+Array(e+1-t.length).join(i)},t.alignCenter=function(e,i,r){if(!i||0>i)return"";(void 0===e||null===e)&&(e=""),"undefined"==typeof r&&(r=" "),"string"!=typeof e&&(e=e.toString());var n=e.length,o=Math.floor(i/2-n/2),s=Math.abs(n%2-i%2),i=e.length;return t.alignRight("",o,r)+e+t.alignLeft("",o+s,r)},t.alignRight=function(t,e,i){if(!e||0>e)return"";(void 0===t||null===t)&&(t=""),"undefined"==typeof i&&(i=" "),"string"!=typeof t&&(t=t.toString());var r=e+1-t.length;return 0>=r?t:Array(e+1-t.length).join(i)+t},t.alignAuto=function(e,r,n){(void 0===e||null===e)&&(e="");var o=i.call(e);if(n||(n=" "),r=+r,"[object String]"!==o&&(e=e.toString()),e.length<r)switch(o){case"[object Number]":return t.alignRight(e,r,n);default:return t.alignLeft(e,r,n)}return e},t.arrayFill=function(t,e){for(var i=new Array(t),r=0;r!==t;r++)i[r]=e;return i},t.prototype.reset=t.prototype.clear=function(e){return this.__name="",this.__nameAlign=t.CENTER,this.__rows=[],this.__maxCells=0,this.__aligns=[],this.__colMaxes=[],this.__spacing=1,this.__heading=null,this.__headingAlign=t.CENTER,this.setBorder(),"[object String]"===i.call(e)?this.__name=e:"[object Object]"===i.call(e)&&this.fromJSON(e),this},t.prototype.setBorder=function(t,e,i,r){return this.__border=!0,1===arguments.length&&(e=i=r=t),this.__edge=t||"|",this.__fill=e||"-",this.__top=i||".",this.__bottom=r||"'",this},t.prototype.removeBorder=function(){return this.__border=!1,this.__edge=" ",this.__fill=" ",this},t.prototype.setAlign=function(t,e){return this.__aligns[t]=e,this},t.prototype.setTitle=function(t){return this.__name=t,this},t.prototype.getTitle=function(){return this.__name},t.prototype.setTitleAlign=function(t){return this.__nameAlign=t,this},t.prototype.sort=function(t){return this.__rows.sort(t),this},t.prototype.sortColumn=function(t,e){return this.__rows.sort(function(i,r){return e(i[t],r[t])}),this},t.prototype.setHeading=function(t){return(arguments.length>1||"[object Array]"!==i.call(t))&&(t=e.call(arguments)),this.__heading=t,this},t.prototype.getHeading=function(){return this.__heading.slice()},t.prototype.setHeadingAlign=function(t){return this.__headingAlign=t,this},t.prototype.addRow=function(t){return(arguments.length>1||"[object Array]"!==i.call(t))&&(t=e.call(arguments)),this.__maxCells=Math.max(this.__maxCells,t.length),this.__rows.push(t),this},t.prototype.getRows=function(){return this.__rows.slice().map(function(t){return t.slice()})},t.prototype.addRowMatrix=function(t){for(var e=0;e<t.length;e++)this.addRow(t[e]);return this},t.prototype.addData=function(t,e,r){if("[object Array]"!==i.call(t))return this;for(var n=0,o=t.length;o>n;n++){var s=e(t[n]);r?this.addRowMatrix(s):this.addRow(s)}return this},t.prototype.clearRows=function(){return this.__rows=[],this.__maxCells=0,this.__colMaxes=[],this},t.prototype.setJustify=function(t){return 0===arguments.length&&(t=!0),this.__justify=!!t,this},t.prototype.toJSON=function(){return{title:this.getTitle(),heading:this.getHeading(),rows:this.getRows()}},t.prototype.parse=t.prototype.fromJSON=function(t){return this.clear().setTitle(t.title).setHeading(t.heading).addRowMatrix(t.rows)},t.prototype.render=t.prototype.valueOf=t.prototype.toString=function(){for(var e,i=this,r=[],n=this.__maxCells,o=t.arrayFill(n,0),s=3*n,h=this.__rows,a=this.__border,l=this.__heading?[this.__heading].concat(h):h,_=0;_<l.length;_++)for(var u=l[_],g=0;n>g;g++){var p=u[g];o[g]=Math.max(o[g],p?p.toString().length:0)}this.__colMaxes=o,e=this.__justify?Math.max.apply(null,o):0,o.forEach(function(t){s+=e?e:t+i.__spacing}),e&&(s+=o.length),s-=this.__spacing,a&&r.push(this._seperator(s-n+1,this.__top)),this.__name&&(r.push(this._renderTitle(s-n+1)),a&&r.push(this._seperator(s-n+1))),this.__heading&&(r.push(this._renderRow(this.__heading," ",this.__headingAlign)),r.push(this._rowSeperator(n,this.__fill)));for(var _=0;_<this.__rows.length;_++)r.push(this._renderRow(this.__rows[_]," "));a&&r.push(this._seperator(s-n+1,this.__bottom));var f=this.options.prefix||"";return f+r.join("\n"+f)},t.prototype._seperator=function(e,i){return i||(i=this.__edge),i+t.alignRight(i,e,this.__fill)},t.prototype._rowSeperator=function(){var e=t.arrayFill(this.__maxCells,this.__fill);return this._renderRow(e,this.__fill)},t.prototype._renderTitle=function(e){var i=" "+this.__name+" ",r=t.align(this.__nameAlign,i,e-1," ");return this.__edge+r+this.__edge},t.prototype._renderRow=function(e,i,r){for(var n=[""],o=this.__colMaxes,s=0;s<this.__maxCells;s++){var h=e[s],a=this.__justify?Math.max.apply(null,o):o[s],l=a,_=this.__aligns[s],u=r,g="alignAuto";"undefined"==typeof r&&(u=_),u===t.LEFT&&(g="alignLeft"),u===t.CENTER&&(g="alignCenter"),u===t.RIGHT&&(g="alignRight"),n.push(t[g](h,l,i))}var p=n.join(i+this.__edge+i);return p=p.substr(1,p.length),p+i+this.__edge},["Left","Right","Center"].forEach(function(i){var r=t[i.toUpperCase()];["setAlign","setTitleAlign","setHeadingAlign"].forEach(function(n){t.prototype[n+i]=function(){var t=e.call(arguments).concat(r);return this[n].apply(this,t)}})}),"undefined"!=typeof exports?module.exports=t:this.AsciiTable=t}.call(this);
-
-// ########  Northwind collection Fields (output generated from Variety.js) ########
-
-collectionFields = [
-    { collection: 'categories', field: 'CategoryID', types: 'Number' },
-    { collection: 'categories', field: 'CategoryName', types: 'String' },
-    { collection: 'categories', field: 'Description', types: 'String' },
-    { collection: 'categories', field: 'Picture', types: 'String' },
-    { collection: 'categories', field: '_id', types: 'ObjectId' },
-    { collection: 'categories', field: 'field4', types: 'String' },
-    { collection: 'categories', field: 'field5', types: 'String' },
-    { collection: 'categories', field: 'field6', types: 'String' },
-    { collection: 'categories', field: 'field7', types: 'String' },
-    { collection: 'shippers', field: 'CompanyName', types: 'String' },
-    { collection: 'shippers', field: 'Phone', types: 'String' },
-    { collection: 'shippers', field: 'ShipperID', types: 'Number' },
-    { collection: 'shippers', field: '_id', types: 'ObjectId' },
-    { collection: 'regions', field: 'RegionDescription', types: 'String' },
-    { collection: 'regions', field: 'RegionID', types: 'Number' },
-    { collection: 'regions', field: '_id', types: 'ObjectId' },
-    { collection: 'products', field: 'CategoryID', types: 'Number' },
-    { collection: 'products', field: 'Discontinued', types: 'Number' },
-    { collection: 'products', field: 'ProductID', types: 'Number' },
-    { collection: 'products', field: 'ProductName', types: 'String' },
-    { collection: 'products', field: 'QuantityPerUnit', types: 'String' },
-    { collection: 'products', field: 'ReorderLevel', types: 'Number' },
-    { collection: 'products', field: 'SupplierID', types: 'Number' },
-    { collection: 'products', field: 'UnitPrice', types: 'Number' },
-    { collection: 'products', field: 'UnitsInStock', types: 'Number' },
-    { collection: 'products', field: 'UnitsOnOrder', types: 'Number' },
-    { collection: 'products', field: '_id', types: 'ObjectId' },
-    { collection: 'territories', field: 'RegionID', types: 'Number' },
-    { collection: 'territories', field: 'TerritoryDescription', types: 'String' },
-    { collection: 'territories', field: 'TerritoryID', types: 'Number' },
-    { collection: 'territories', field: '_id', types: 'ObjectId' },
-    { collection: 'suppliers', field: 'Address', types: 'String (27),Number (2)' },
-    { collection: 'suppliers', field: 'City', types: 'String (27),Number (2)' },
-    { collection: 'suppliers', field: 'CompanyName', types: 'String' },
-    { collection: 'suppliers', field: 'ContactName', types: 'String' },
-    { collection: 'suppliers', field: 'ContactTitle', types: 'String' },
-    { collection: 'suppliers', field: 'Country', types: 'String (21),Number (8)' },
-    { collection: 'suppliers', field: 'Fax', types: 'String (28),Number (1)' },
-    { collection: 'suppliers', field: 'HomePage', types: 'String' },
-    { collection: 'suppliers', field: 'Phone', types: 'String (28),Number (1)' },
-    { collection: 'suppliers', field: 'PostalCode', types: 'String (15),Number (14)' },
-    { collection: 'suppliers', field: 'Region', types: 'String' },
-    { collection: 'suppliers', field: 'SupplierID', types: 'Number' },
-    { collection: 'suppliers', field: '_id', types: 'ObjectId' },
-    { collection: 'suppliers', field: 'field12', types: 'String' },
-    { collection: 'customers', field: 'Address', types: 'String (82),Number (9)' },
-    { collection: 'customers', field: 'City', types: 'String (76),Number (15)' },
-    { collection: 'customers', field: 'CompanyName', types: 'String' },
-    { collection: 'customers', field: 'ContactName', types: 'String' },
-    { collection: 'customers', field: 'ContactTitle', types: 'String' },
-    { collection: 'customers', field: 'Country', types: 'String (77),Number (14)' },
-    { collection: 'customers', field: 'CustomerID', types: 'String' },
-    { collection: 'customers', field: 'Fax', types: 'String' },
-    { collection: 'customers', field: 'Phone', types: 'String' },
-    { collection: 'customers', field: 'PostalCode', types: 'String (39),Number (52)' },
-    { collection: 'customers', field: 'Region', types: 'String' },
-    { collection: 'customers', field: '_id', types: 'ObjectId' },
-    { collection: 'customers', field: 'field11', types: 'String' },
-    { collection: 'orders', field: 'CustomerID', types: 'String' },
-    { collection: 'orders', field: 'EmployeeID', types: 'Number' },
-    { collection: 'orders', field: 'Freight', types: 'Number' },
-    { collection: 'orders', field: 'OrderDate', types: 'String' },
-    { collection: 'orders', field: 'OrderID', types: 'Number' },
-    { collection: 'orders', field: 'RequiredDate', types: 'String' },
-    { collection: 'orders', field: 'ShipAddress', types: 'String (772),Number (58)' },
-    { collection: 'orders', field: 'ShipCity', types: 'String (712),Number (118)' },
-    { collection: 'orders', field: 'ShipCountry', types: 'String (749),Number (81)' },
-    { collection: 'orders', field: 'ShipName', types: 'String' },
-    { collection: 'orders', field: 'ShipPostalCode', types: 'Number (498),String (332)' },
-    { collection: 'orders', field: 'ShipRegion', types: 'String' },
-    { collection: 'orders', field: 'ShipVia', types: 'Number' },
-    { collection: 'orders', field: 'ShippedDate', types: 'String' },
-    { collection: 'orders', field: '_id', types: 'ObjectId' },
-    { collection: 'orders', field: 'field14', types: 'String' },
-    { collection: 'order-details', field: 'Discount', types: 'Number' },
-    { collection: 'order-details', field: 'OrderID', types: 'Number' },
-    { collection: 'order-details', field: 'ProductID', types: 'Number' },
-    { collection: 'order-details', field: 'Quantity', types: 'Number' },
-    { collection: 'order-details', field: 'UnitPrice', types: 'Number' },
-    { collection: 'order-details', field: '_id', types: 'ObjectId' },
-    { collection: 'northwind', field: 'CustomerID', types: 'Number (2091),String (909)' },
-    { collection: 'northwind', field: 'EmployeeID', types: 'Number (2998),String (2)' },
-    { collection: 'northwind', field: 'OrderDate', types: 'Number (2168),String (832)' },
-    { collection: 'northwind', field: 'OrderID', types: 'Number (2998),String (2)' },
-    { collection: 'northwind', field: 'RequiredDate', types: 'Number (2091),String (909)' },
-    { collection: 'northwind', field: '_id', types: 'ObjectId' },
-    { collection: 'northwind', field: 'Freight', types: 'Number (907),String (1)' },
-    { collection: 'northwind', field: 'ShipAddress', types: 'Number (135),String (773)' },
-    { collection: 'northwind', field: 'ShipName', types: 'Number (77),String (831)' },
-    { collection: 'northwind', field: 'ShipVia', types: 'Number (907),String (1)' },
-    { collection: 'northwind', field: 'ShippedDate', types: 'Number (77),String (831)' },
-    { collection: 'northwind', field: 'ShipCity', types: 'Number (118),String (712)' },
-    { collection: 'northwind', field: 'ShipCountry', types: 'String (749),Number (81)' },
-    { collection: 'northwind', field: 'ShipPostalCode', types: 'String (332),Number (498)' },
-    { collection: 'northwind', field: 'ShipRegion', types: 'String' },
-    { collection: 'northwind', field: 'field14', types: 'String' },
-];
-
-collections = _.uniq(_.pluck(collectionFields, 'collection'));
