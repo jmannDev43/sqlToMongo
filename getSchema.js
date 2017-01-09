@@ -26,7 +26,7 @@ MongoClient.connect(url, function (err, db) {
             var collectionNames = collections.map(function (c) {
                 return c.name
             });
-            var lines = '\n ******************************************* \n';
+
             var lastCollectionName = _.last(collectionNames);
             collectionNames.forEach(function (name) {
                 console.log('running collection: ' + name.toUpperCase());
@@ -43,8 +43,8 @@ MongoClient.connect(url, function (err, db) {
                         var collectionInfo = _.map(json, function (j) {
                             var types = _.map(j.value.types, function (t, tk) {
                                 return tk + '(' + t + ')';
-                            }).join(', '.toString());
-                            return {field: j._id.key.toString(), types: types};
+                            }).join(', ');
+                            return {field: j._id.key, types: types};
                         });
                         dbInfo[name] = collectionInfo;
                         if (name === lastCollectionName) {
