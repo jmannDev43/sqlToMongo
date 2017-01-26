@@ -48,7 +48,7 @@ MongoClient.connect(url, function (err, db) {
                         });
                         dbInfo[name] = collectionInfo;
                         if (name === lastCollectionName) {
-                            var file = 'usr/local/scripts/dbInfo.js';
+                            var file = '/usr/local/scripts/dbInfo.js';
 
                             // clear file
                             exec('> ' + file, function () {
